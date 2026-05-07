@@ -172,7 +172,19 @@ export class LeadsRepository {
     );
   }
 
-  async hasProcessedIncomingMessage(leadId: number, remoteJid: string, messageId: string) {
+  async hasProcessedIncomingMessage(leadId: number, remoteJid: string, messageIds: string[]) {
+    if (messageIds.length === 0) {
+      return false;
+    }
+
+    const conditions = messageIds
+      .map(
+        () =>
+          `(JSON_UNQUOTE(JSON_EXTRACT(metadados, '$.messageId')) = ? OR JSON_CONTAINS(COALESCE(JSON_EXTRACT(metadados, '$.messageIds'), JSON_ARRAY()), JSON_QUOTE(?)))`,
+      )
+      .join(' OR ');
+    const params = messageIds.flatMap((messageId) => [messageId, messageId]);
+
     const [rows] = await pool.query<CountRow[]>(
       `
         SELECT COUNT(*) AS total
@@ -180,9 +192,9 @@ export class LeadsRepository {
         WHERE lead_id = ?
           AND tipo = 'resposta_recebida'
           AND JSON_UNQUOTE(JSON_EXTRACT(metadados, '$.remoteJid')) = ?
-          AND JSON_UNQUOTE(JSON_EXTRACT(metadados, '$.messageId')) = ?
+          AND (${conditions})
       `,
-      [leadId, remoteJid, messageId],
+      [leadId, remoteJid, ...params],
     );
 
     return Number(rows[0]?.total || 0) > 0;

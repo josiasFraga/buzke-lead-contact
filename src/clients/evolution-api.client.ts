@@ -12,6 +12,12 @@ type WhatsAppNumberResult = {
   name?: string;
 };
 
+type ReadMessageInput = {
+  remoteJid: string;
+  fromMe: boolean;
+  id: string;
+};
+
 export class EvolutionApiClient {
   private readonly http: AxiosInstance;
 
@@ -42,6 +48,7 @@ export class EvolutionApiClient {
     return this.http.post(`/message/sendText/${encodeURIComponent(env.evolutionInstanceName)}`, {
       number,
       text,
+      delay: env.evolutionTypingDelayMs,
     });
   }
 
@@ -56,6 +63,17 @@ export class EvolutionApiClient {
       caption: caption || '',
       media: file.toString('base64'),
       fileName: path.basename(filePath),
+      delay: env.evolutionTypingDelayMs,
+    });
+  }
+
+  async markMessagesAsRead(readMessages: ReadMessageInput[]) {
+    if (readMessages.length === 0) {
+      return;
+    }
+
+    return this.http.post(`/chat/markMessageAsRead/${encodeURIComponent(env.evolutionInstanceName)}`, {
+      readMessages,
     });
   }
 

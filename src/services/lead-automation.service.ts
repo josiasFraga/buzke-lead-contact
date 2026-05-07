@@ -27,6 +27,10 @@ import {
 } from '../types/leads.js';
 
 const videoFilePath = path.resolve('video', 'gestao-profissional-de-quadras-esportivas.mp4');
+type PendingIncomingMessage = {
+  messages: IncomingLeadMessage[];
+  timer: ReturnType<typeof setTimeout>;
+};
 
 function looksLikeAutomaticMessage(text: string) {
   const normalized = text.toLowerCase();
@@ -82,6 +86,7 @@ export class LeadAutomationService {
   private readonly repository = new LeadsRepository();
   private readonly evolutionClient = new EvolutionApiClient();
   private readonly geminiClient = new GeminiClient();
+  private readonly pendingIncomingMessages = new Map<string, PendingIncomingMessage>();
   private processing = false;
   private webhookConfigured = false;
 
@@ -150,11 +155,89 @@ export class LeadAutomationService {
 
     const incomingMessages = this.extractIncomingMessages(body);
 
+    await this.markIncomingMessagesAsRead(incomingMessages);
+
     for (const incoming of incomingMessages) {
-      await this.handleIncomingMessage(incoming);
+      this.queueIncomingMessage(incoming);
     }
 
-    return { received: incomingMessages.length };
+    return { received: incomingMessages.length, queued: incomingMessages.length };
+  }
+
+  private async markIncomingMessagesAsRead(messages: IncomingLeadMessage[]) {
+    const readMessages = messages
+      .filter((message) => !message.fromMe && message.messageId && message.remoteJid)
+      .map((message) => ({
+        remoteJid: message.remoteJid,
+        fromMe: false,
+        id: message.messageId,
+      }));
+
+    if (readMessages.length === 0) {
+      return;
+    }
+
+    try {
+      await this.evolutionClient.markMessagesAsRead(readMessages);
+    } catch (error) {
+      console.error('falha ao marcar mensagens como lidas', error);
+    }
+  }
+
+  private queueIncomingMessage(incoming: IncomingLeadMessage) {
+    const key = incoming.remoteJid || incoming.phone;
+    const existing = this.pendingIncomingMessages.get(key);
+
+    if (existing) {
+      clearTimeout(existing.timer);
+
+      const knownIds = new Set(existing.messages.map((message) => message.messageId));
+      if (!knownIds.has(incoming.messageId)) {
+        existing.messages.push(incoming);
+      }
+
+      existing.timer = setTimeout(() => {
+        void this.flushPendingIncomingMessages(key);
+      }, env.incomingMessageDebounceMs);
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      void this.flushPendingIncomingMessages(key);
+    }, env.incomingMessageDebounceMs);
+
+    this.pendingIncomingMessages.set(key, {
+      messages: [incoming],
+      timer,
+    });
+  }
+
+  private async flushPendingIncomingMessages(key: string) {
+    const pending = this.pendingIncomingMessages.get(key);
+    if (!pending) {
+      return;
+    }
+
+    this.pendingIncomingMessages.delete(key);
+
+    const combined = this.combineIncomingMessages(pending.messages);
+    await this.handleIncomingMessage(combined);
+  }
+
+  private combineIncomingMessages(messages: IncomingLeadMessage[]): IncomingLeadMessage {
+    const baseMessage = messages[messages.length - 1] ?? messages[0];
+    const uniqueMessages = messages.filter((message, index, all) => all.findIndex((item) => item.messageId === message.messageId) === index);
+
+    return {
+      ...baseMessage,
+      messageIds: uniqueMessages.map((message) => message.messageId),
+      messageId: baseMessage.messageId,
+      text: uniqueMessages
+        .map((message) => message.text.trim())
+        .filter(Boolean)
+        .join('\n')
+        .trim(),
+    };
   }
 
   private async processPendingFollowUps() {
@@ -261,7 +344,8 @@ export class LeadAutomationService {
       return;
     }
 
-    const alreadyProcessed = await this.repository.hasProcessedIncomingMessage(lead.id, incoming.remoteJid, incoming.messageId);
+    const messageIds = incoming.messageIds?.filter(Boolean) ?? [incoming.messageId];
+    const alreadyProcessed = await this.repository.hasProcessedIncomingMessage(lead.id, incoming.remoteJid, messageIds);
     if (alreadyProcessed) {
       return;
     }
@@ -270,7 +354,13 @@ export class LeadAutomationService {
       leadId: lead.id,
       tipo: 'resposta_recebida',
       mensagem: incoming.text,
-      metadados: { event: incoming.event, messageId: incoming.messageId, remoteJid: incoming.remoteJid, pushName: incoming.pushName },
+      metadados: {
+        event: incoming.event,
+        messageId: incoming.messageId,
+        messageIds,
+        remoteJid: incoming.remoteJid,
+        pushName: incoming.pushName,
+      },
     });
 
     if (terminalLeadStatuses.has(lead.status)) {

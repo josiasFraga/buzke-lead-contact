@@ -46,6 +46,8 @@ const schema = z.object({
   EVOLUTION_WEBHOOK_SECRET: z.string().optional().default(''),
   APP_BASE_URL: z.string().optional().default(''),
   LEAD_POLL_INTERVAL_MS: numberFromEnv(60000),
+  INCOMING_MESSAGE_DEBOUNCE_MS: numberFromEnv(3000),
+  EVOLUTION_TYPING_DELAY_MS: numberFromEnv(1500),
   DEBUG: booleanFromEnv(false),
 });
 
@@ -72,8 +74,10 @@ export const env = {
   evolutionApiKey: parsed.EVOLUTION_API_KEY,
   evolutionInstanceName: defaultInstanceName,
   evolutionWebhookSecret: parsed.EVOLUTION_WEBHOOK_SECRET,
+  evolutionTypingDelayMs: parsed.EVOLUTION_TYPING_DELAY_MS,
   appBaseUrl: parsed.APP_BASE_URL.replace(/\/$/, ''),
   leadPollIntervalMs: parsed.LEAD_POLL_INTERVAL_MS,
+  incomingMessageDebounceMs: parsed.INCOMING_MESSAGE_DEBOUNCE_MS,
   debug: parsed.DEBUG,
 };
 

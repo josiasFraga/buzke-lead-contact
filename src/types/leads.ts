@@ -78,6 +78,7 @@ export interface LeadRecord {
 export interface IncomingLeadMessage {
   event: string;
   messageId: string;
+  messageIds?: string[];
   text: string;
   remoteJid: string;
   phone: string;
