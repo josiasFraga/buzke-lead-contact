@@ -48,6 +48,7 @@ const schema = z.object({
   LEAD_POLL_INTERVAL_MS: numberFromEnv(60000),
   INCOMING_MESSAGE_DEBOUNCE_MS: numberFromEnv(3000),
   EVOLUTION_TYPING_DELAY_MS: numberFromEnv(1500),
+  OUTBOUND_MESSAGE_GAP_MS: numberFromEnv(3000),
   DEBUG: booleanFromEnv(false),
 });
 
@@ -79,6 +80,7 @@ export const env = {
   leadPollIntervalMs: parsed.LEAD_POLL_INTERVAL_MS,
   incomingMessageDebounceMs: parsed.INCOMING_MESSAGE_DEBOUNCE_MS,
   debug: parsed.DEBUG,
+  outboundMessageGapMs: parsed.OUTBOUND_MESSAGE_GAP_MS,
 };
 
 export const evolutionConfigured = Boolean(env.evolutionApiUrl && env.evolutionApiKey && env.evolutionInstanceName);

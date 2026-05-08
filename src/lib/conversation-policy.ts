@@ -4,12 +4,31 @@ function normalizeHeuristicText(text: string) {
   return text
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-zA-Z0-9\s]/g, ' ')
     .toLowerCase()
+    .replace(/\s+/g, ' ')
     .trim();
 }
 
 function includesAny(text: string, patterns: readonly string[]) {
   return patterns.some((pattern) => text.includes(pattern));
+}
+
+const greetingOnlyPatterns = [
+  'oi',
+  'ola',
+  'olá',
+  'opa',
+  'bom dia',
+  'boa tarde',
+  'boa noite',
+  'tudo bem',
+  'tudo certo',
+] as const;
+
+function isGreetingOnly(text: string) {
+  const normalized = normalizeHeuristicText(text);
+  return greetingOnlyPatterns.some((pattern) => normalized === normalizeHeuristicText(pattern));
 }
 
 type HeuristicActionConfig = {
@@ -29,6 +48,7 @@ type HeuristicActionConfig = {
 type HeuristicRule = {
   statuses: Array<LeadRecord['status'] | '*'>;
   patterns: readonly string[];
+  matchType?: 'includes' | 'exact';
   action: HeuristicActionConfig;
 };
 
@@ -57,7 +77,25 @@ function buildHeuristicClassification(input: HeuristicActionConfig, message: str
 const globalHeuristicRules: HeuristicRule[] = [
   {
     statuses: ['*'],
-    patterns: ['nao precisa mandar', 'não precisa mandar', 'pode parar', 'pare de mandar', 'nao chama mais', 'não chama mais', 'nao me chama', 'não me chama', 'remova meu numero', 'remova meu número'],
+    patterns: [
+      'nao precisa mandar',
+      'não precisa mandar',
+      'pode parar',
+      'pare de mandar',
+      'nao chama mais',
+      'não chama mais',
+      'nao me chama',
+      'não me chama',
+      'remova meu numero',
+      'remova meu número',
+      'nao mande mais mensagem',
+      'não mande mais mensagem',
+      'nao quero mais contato',
+      'não quero mais contato',
+      'retire meu contato',
+      'pare por favor',
+      'pode encerrar',
+    ],
     action: {
       intent: 'STOP',
       summary: 'Pedido de encerramento detectado por heurística.',
@@ -68,12 +106,63 @@ const globalHeuristicRules: HeuristicRule[] = [
   },
   {
     statuses: ['*'],
-    patterns: ['sem interesse', 'nao tenho interesse', 'não tenho interesse', 'nao me interessa', 'não me interessa', 'agora nao', 'agora não', 'mais pra frente', 'depois vejo', 'deixa quieto'],
+    patterns: [
+      'sem interesse',
+      'sem interesse no momento',
+      'nao tenho interesse',
+      'não tenho interesse',
+      'nao me interessa',
+      'não me interessa',
+      'agora nao',
+      'agora não',
+      'mais pra frente',
+      'talvez mais pra frente',
+      'depois vejo',
+      'deixa quieto',
+      'nao obrigada',
+      'não obrigada',
+      'nao obrigado',
+      'não obrigado',
+      'nao quero',
+      'não quero',
+      'melhor nao',
+      'melhor não',
+      'nao faz sentido pra gente',
+      'não faz sentido pra gente',
+      'nao precisamos disso',
+      'não precisamos disso',
+      'nao tenho necessidade',
+      'não tenho necessidade',
+      'ja resolvemos isso de outro jeito',
+      'já resolvemos isso de outro jeito',
+      'nao e prioridade agora',
+      'não é prioridade agora',
+      'prefiro nao',
+      'prefiro não',
+      'nao quero receber video',
+      'não quero receber vídeo',
+      'nao quero ver',
+      'não quero ver',
+      'nao tenho interesse em assistir',
+      'não tenho interesse em assistir',
+      'deixa pra la',
+      'deixa pra lá',
+    ],
     action: {
       intent: 'NO_INTEREST',
       summary: 'Falta de interesse detectada por heurística.',
       conversationSummary: (message) => `Lead sinalizou falta de interesse com a mensagem "${message}".`,
       replySuppressedReason: 'Falta de interesse detectada por heurística.',
+    },
+  },
+  {
+    statuses: ['*'],
+    patterns: ['oi', 'ola', 'olá', 'opa', 'bom dia', 'boa tarde', 'boa noite', 'tudo bem', 'tudo certo'],
+    matchType: 'exact',
+    action: {
+      summary: 'Saudação curta detectada por heurística.',
+      conversationSummary: (message) => `Lead respondeu apenas com uma saudação curta: "${message}".`,
+      replySuppressedReason: 'Saudação curta detectada por heurística.',
     },
   },
 ];
@@ -161,7 +250,11 @@ export function detectConversationHeuristic(text: string, lead: LeadRecord): Rep
 
   for (const rule of [...globalHeuristicRules, ...statusHeuristicMatrix]) {
     const statusMatches = rule.statuses.includes('*') || rule.statuses.includes(lead.status);
-    if (statusMatches && includesAny(normalized, rule.patterns)) {
+    const matched = rule.matchType === 'exact'
+      ? rule.patterns.some((pattern) => normalized === normalizeHeuristicText(pattern))
+      : includesAny(normalized, rule.patterns);
+
+    if (statusMatches && matched) {
       return buildHeuristicClassification(rule.action, text);
     }
   }
@@ -185,6 +278,10 @@ export function shouldRouteToHumanHandoff(input: {
 }) {
   const normalizedSummary = normalizeHeuristicText(`${input.storedSummary} ${input.classification.conversationSummary}`);
   const normalizedMessage = normalizeHeuristicText(input.latestMessage);
+
+  if (isGreetingOnly(normalizedMessage)) {
+    return false;
+  }
 
   if ((handoffPolicy.immediateIntents as readonly ReplyClassification['intent'][]).includes(input.classification.intent)) {
     return true;

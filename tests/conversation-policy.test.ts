@@ -79,6 +79,14 @@ test('heuristica de encerramento curto silencia', () => {
   assert.match(result.summary, /encerramento/i);
 });
 
+test('heuristica trata boa tarde como saudacao curta', () => {
+  const result = detectConversationHeuristic('Boa tarde', buildLead('mensagem_enviada'));
+
+  assert.ok(result);
+  assert.equal(result.shouldReply, false);
+  assert.match(result.summary, /saudação|saudacao/i);
+});
+
 test('handoff reconhece interesse pós-video pelo resumo acumulado', () => {
   const result = shouldRouteToHumanHandoff({
     lead: buildLead('video_enviado'),
@@ -107,6 +115,21 @@ test('handoff nao dispara sem sinais fortes', () => {
     classification: buildClassification({ conversationSummary: 'Lead recebeu o vídeo e vai olhar depois.' }),
     storedSummary: '',
     latestMessage: 'Vou ver depois',
+  });
+
+  assert.equal(result, false);
+});
+
+test('handoff nao dispara com saudacao curta isolada', () => {
+  const result = shouldRouteToHumanHandoff({
+    lead: buildLead('video_enviado'),
+    classification: buildClassification({
+      intent: 'INTERESTED',
+      shouldReply: true,
+      conversationSummary: 'Lead mandou apenas uma saudação curta.',
+    }),
+    storedSummary: '',
+    latestMessage: 'Boa tarde',
   });
 
   assert.equal(result, false);
