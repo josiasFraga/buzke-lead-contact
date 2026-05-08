@@ -1,4 +1,8 @@
-export const initialGreetingMessage = 'Boa tarde, tudo bem?';
+import { getGreetingByTime } from './business-hours.js';
+
+export function getInitialGreetingMessage(date: Date = new Date()) {
+  return `${getGreetingByTime(date)}, tudo bem?`;
+}
 
 export const initialPitchMessage = [
   'Vi a quadra de vocês e achei bem legal o espaço.',

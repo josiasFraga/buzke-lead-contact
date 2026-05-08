@@ -38,7 +38,7 @@ const schema = z.object({
   DB_PASS: z.string().optional().default(''),
   DB_NAME: z.string().default('buzke'),
   GEMINI_API_KEY: z.string().min(1, 'GEMINI_API_KEY é obrigatório'),
-  GEMINI_ASSISTANT_MODEL: z.string().default('gemini-2.5-pro'),
+  GEMINI_ASSISTANT_MODEL: z.string().default('gemini-flash-lite-latest'),
   PHONE: z.string().min(1, 'PHONE é obrigatório'),
   EVOLUTION_API_URL: z.string().optional().default('http://127.0.0.1:8080'),
   EVOLUTION_API_KEY: z.string().optional().default(''),

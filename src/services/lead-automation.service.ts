@@ -6,8 +6,8 @@ import { env } from '../config/env.js';
 import { isWithinBusinessHours } from '../lib/business-hours.js';
 import { detectConversationHeuristic, shouldRouteToHumanHandoff } from '../lib/conversation-policy.js';
 import {
+  getInitialGreetingMessage,
   humanHandoffReply,
-  initialGreetingMessage,
   initialPitchMessage,
   noInterestReply,
   noInterestVideoCaption,
@@ -302,7 +302,27 @@ export class LeadAutomationService {
     }
 
     try {
+      const initialGreetingMessage = getInitialGreetingMessage();
       await this.evolutionClient.sendText(normalizedPhone, initialGreetingMessage);
+
+      await this.repository.updateStatus(lead.id, 'saudacao_enviada', {
+        firstContact: true,
+        lastContact: true,
+      });
+      await this.repository.createInteraction({
+        leadId: lead.id,
+        tipo: 'mensagem_enviada',
+        mensagem: initialGreetingMessage,
+        metadados: { channel: 'whatsapp', template: 'initial_greeting', phone: normalizedPhone },
+      });
+      await this.repository.createInteraction({
+        leadId: lead.id,
+        tipo: 'status_alterado',
+        mensagem: 'Saudação inicial enviada via WhatsApp.',
+        statusAnterior: 'contato_iniciado',
+        statusNovo: 'saudacao_enviada',
+        metadados: { phone: normalizedPhone, waCheck },
+      });
     } catch (error) {
       await this.repository.setStatusWithInteraction({
         leadId: lead.id,
@@ -313,25 +333,6 @@ export class LeadAutomationService {
       });
       throw error;
     }
-
-    await this.repository.updateStatus(lead.id, 'saudacao_enviada', {
-      firstContact: true,
-      lastContact: true,
-    });
-    await this.repository.createInteraction({
-      leadId: lead.id,
-      tipo: 'mensagem_enviada',
-      mensagem: initialGreetingMessage,
-      metadados: { channel: 'whatsapp', template: 'initial_greeting', phone: normalizedPhone },
-    });
-    await this.repository.createInteraction({
-      leadId: lead.id,
-      tipo: 'status_alterado',
-      mensagem: 'Saudação inicial enviada via WhatsApp.',
-      statusAnterior: 'contato_iniciado',
-      statusNovo: 'saudacao_enviada',
-      metadados: { phone: normalizedPhone, waCheck },
-    });
   }
 
   private async handleIncomingMessage(incoming: IncomingLeadMessage) {

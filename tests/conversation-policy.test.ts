@@ -71,6 +71,33 @@ test('heuristica apos pitch reconhece autorizacao curta para video', () => {
   assert.equal(result.shouldReply, true);
 });
 
+test('heuristica apos pitch reconhece ok como autorizacao para video', () => {
+  const result = detectConversationHeuristic('Ok', buildLead('mensagem_enviada'));
+
+  assert.ok(result);
+  assert.equal(result.intent, 'ALLOW_VIDEO');
+  assert.equal(result.allowedVideo, true);
+  assert.equal(result.shouldReply, true);
+});
+
+test('heuristica apos pitch reconhece manda ai como autorizacao para video', () => {
+  const result = detectConversationHeuristic('Manda aí', buildLead('mensagem_enviada'));
+
+  assert.ok(result);
+  assert.equal(result.intent, 'ALLOW_VIDEO');
+  assert.equal(result.allowedVideo, true);
+  assert.equal(result.shouldReply, true);
+});
+
+test('heuristica apos pitch reconhece pode ser como autorizacao para video', () => {
+  const result = detectConversationHeuristic('Pode ser', buildLead('mensagem_enviada'));
+
+  assert.ok(result);
+  assert.equal(result.intent, 'ALLOW_VIDEO');
+  assert.equal(result.allowedVideo, true);
+  assert.equal(result.shouldReply, true);
+});
+
 test('heuristica de encerramento curto silencia', () => {
   const result = detectConversationHeuristic('Obrigado', buildLead('mensagem_enviada'));
 

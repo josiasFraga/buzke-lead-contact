@@ -15,6 +15,20 @@ function getSaoPauloParts(date: Date) {
   return { hour, minute, weekday };
 }
 
+export function getGreetingByTime(date: Date = new Date()) {
+  const { hour } = getSaoPauloParts(date);
+
+  if (hour < 12) {
+    return 'Bom dia';
+  }
+
+  if (hour < 18) {
+    return 'Boa tarde';
+  }
+
+  return 'Boa noite';
+}
+
 export function isWithinBusinessHours(date: Date = new Date()) {
   const { hour, minute, weekday } = getSaoPauloParts(date);
   const totalMinutes = hour * 60 + minute;
