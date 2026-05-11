@@ -336,7 +336,7 @@ export class LeadAutomationService {
   }
 
   private async handleIncomingMessage(incoming: IncomingLeadMessage) {
-    if (incoming.fromMe || !incoming.text.trim()) {
+    if (incoming.fromMe) {
       return;
     }
 
@@ -354,17 +354,70 @@ export class LeadAutomationService {
     await this.repository.createInteraction({
       leadId: lead.id,
       tipo: 'resposta_recebida',
-      mensagem: incoming.text,
+      mensagem: incoming.text || `Midia recebida: ${incoming.mediaType || 'desconhecida'}`,
       metadados: {
         event: incoming.event,
         messageId: incoming.messageId,
         messageIds,
+        mediaType: incoming.mediaType,
         remoteJid: incoming.remoteJid,
         pushName: incoming.pushName,
       },
     });
 
     if (terminalLeadStatuses.has(lead.status)) {
+      return;
+    }
+
+    if (incoming.mediaType) {
+      if (incoming.mediaType === 'audio') {
+        await this.repository.setStatusWithInteraction({
+          leadId: lead.id,
+          fromStatus: lead.status,
+          toStatus: 'passar_para_vendas',
+          message: 'Lead respondeu com áudio; atendimento transferido para humano imediatamente.',
+          metadata: {
+            event: incoming.event,
+            mediaType: incoming.mediaType,
+            messageId: incoming.messageId,
+            messageIds,
+            remoteJid: incoming.remoteJid,
+          },
+          lastContact: true,
+        });
+
+        if (isWithinBusinessHours()) {
+          await this.evolutionClient.sendText(incoming.phone, humanHandoffReply);
+          await this.repository.createInteraction({
+            leadId: lead.id,
+            tipo: 'mensagem_enviada',
+            mensagem: humanHandoffReply,
+            metadados: { template: 'human_handoff_reply', trigger: 'audio_media_handoff' },
+          });
+        }
+        return;
+      }
+
+      if (lead.status !== 'respondeu') {
+        await this.repository.setStatusWithInteraction({
+          leadId: lead.id,
+          fromStatus: lead.status,
+          toStatus: 'respondeu',
+          message: `Lead respondeu com mídia (${incoming.mediaType}); automação não processa mídias.`,
+          metadata: {
+            event: incoming.event,
+            mediaType: incoming.mediaType,
+            messageId: incoming.messageId,
+            messageIds,
+            remoteJid: incoming.remoteJid,
+          },
+          lastContact: true,
+        });
+      }
+      return;
+    }
+
+    if (!incoming.text.trim()) {
       return;
     }
 
@@ -891,9 +944,10 @@ export class LeadAutomationService {
         const messageBody = item?.message || item?.data?.message || {};
         const remoteJid = String(key.remoteJid || item?.remoteJid || item?.data?.key?.remoteJid || '');
         const fromMe = Boolean(key.fromMe || item?.fromMe);
+        const mediaType = this.extractMediaType(messageBody);
         const text = this.extractMessageText(messageBody).trim();
 
-        if (!remoteJid || !text) {
+        if (!remoteJid || (!text && !mediaType)) {
           return null;
         }
 
@@ -901,6 +955,7 @@ export class LeadAutomationService {
           event,
           messageId: String(key.id || item?.id || item?.messageId || item?.data?.key?.id || ''),
           text,
+          mediaType,
           remoteJid,
           phone: jidToPhone(remoteJid),
           fromMe,
@@ -909,6 +964,30 @@ export class LeadAutomationService {
         } satisfies IncomingLeadMessage;
       })
         .filter((item: IncomingLeadMessage | null): item is IncomingLeadMessage => item !== null);
+  }
+
+  private extractMediaType(message: Record<string, any>): IncomingLeadMessage['mediaType'] {
+    if (message?.audioMessage) {
+      return 'audio';
+    }
+
+    if (message?.imageMessage) {
+      return 'image';
+    }
+
+    if (message?.videoMessage) {
+      return 'video';
+    }
+
+    if (message?.documentMessage) {
+      return 'document';
+    }
+
+    if (message?.stickerMessage) {
+      return 'sticker';
+    }
+
+    return undefined;
   }
 
   private extractMessageText(message: Record<string, any>): string {

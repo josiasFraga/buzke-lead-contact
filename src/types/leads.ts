@@ -80,6 +80,7 @@ export interface IncomingLeadMessage {
   messageId: string;
   messageIds?: string[];
   text: string;
+  mediaType?: 'audio' | 'image' | 'video' | 'document' | 'sticker';
   remoteJid: string;
   phone: string;
   fromMe: boolean;

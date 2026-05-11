@@ -67,11 +67,18 @@ export class LeadsRepository {
   async findNextInitialLead(statuses: readonly string[]) {
     const [rows] = await pool.query<LeadRow[]>(
       `
-        SELECT *
-        FROM leads
-        WHERE deleted_at IS NULL
-          AND COALESCE(NULLIF(status, ''), 'novo') IN (${placeholders(statuses.length)})
-        ORDER BY ${priorityOrderClause()} ASC, created ASC
+        SELECT l.*
+        FROM leads l
+        WHERE l.deleted_at IS NULL
+          AND COALESCE(NULLIF(l.status, ''), 'novo') IN (${placeholders(statuses.length)})
+          AND EXISTS (
+            SELECT 1
+            FROM lead_cidades_preferencias lcp
+            WHERE lcp.finalizado = 1
+              AND UPPER(TRIM(lcp.cidade)) = UPPER(TRIM(l.cidade))
+              AND UPPER(TRIM(lcp.uf)) = UPPER(TRIM(l.estado))
+          )
+        ORDER BY ${priorityOrderClause().replace(/prioridade/g, 'l.prioridade')} ASC, l.created ASC
         LIMIT 1
       `,
       [...statuses],
